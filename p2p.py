@@ -132,25 +132,22 @@ def on_message_received(message):
     """
     Called when a message is received. We'll handle both text and file chunks.
     """
-    # If it's bytes, it might be part of a file or metadata
+    print(f"DEBUG: Message received: {message}")
     if isinstance(message, bytes):
         handle_binary_message(message)
     else:
-        # If it's text, see if it's file metadata or normal text
         try:
             data = json.loads(message)
-            # Check if it has file metadata
             if data.get("type") == "file_meta":
                 file_name = data["file_name"]
                 file_size = data["file_size"]
                 print(f"Incoming file: {file_name} ({file_size} bytes)")
                 open_file_receiver(file_name, file_size)
             else:
-                # It's normal text in JSON
                 print("Peer:", data)
         except:
-            # It's likely plain text that isn't JSON
             print("Peer:", message)
+
 
 incoming_files = {}
 
