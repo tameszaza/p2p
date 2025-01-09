@@ -33,8 +33,7 @@ async def run_offer(pc, file_to_send):
     print("======================================================")
 
     # Wait here for user to input the ANSWER from the other peer
-    print("Paste the ANSWER from the other peer and press Enter:")
-    answer_str = sys.stdin.read().strip()
+    answer_str = input("Paste the ANSWER from the other peer and press Enter:").strip()
     try:
         answer_json = json.loads(answer_str)
         answer = RTCSessionDescription(sdp=answer_json["sdp"], type=answer_json["type"])
@@ -52,8 +51,8 @@ async def run_answer(pc, file_to_send):
     We wait for the user to paste the offer, then produce an answer for them to paste back.
     """
     # Wait for the user to input the OFFER
-    print("Paste the OFFER from the other peer and press Enter:")
-    offer_str = sys.stdin.read().strip()
+    offer_str = input("Paste the OFFER from the other peer and press Enter:\n").strip()
+
 
     try:
         offer_json = json.loads(offer_str)
