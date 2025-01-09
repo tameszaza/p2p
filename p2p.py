@@ -4,10 +4,9 @@ import json
 import os
 import sys
 
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
-from aiortc.contrib.signaling import BYE
+from aiortc import RTCPeerConnection, RTCSessionDescription
 
-# We'll use a single data channel for both chat and file transfer
+# We'll use a single data channel for both chat & file transfer
 CHANNEL_LABEL = "p2p-data-channel"
 
 async def run_offer(pc, file_to_send):
@@ -33,7 +32,7 @@ async def run_offer(pc, file_to_send):
     print("======================================================")
 
     # Wait here for user to input the ANSWER from the other peer
-    answer_str = input("Paste the ANSWER from the other peer and press Enter:").strip()
+    answer_str = input("Paste the ANSWER from the other peer and press Enter:\n").strip()
     try:
         answer_json = json.loads(answer_str)
         answer = RTCSessionDescription(sdp=answer_json["sdp"], type=answer_json["type"])
@@ -52,7 +51,6 @@ async def run_answer(pc, file_to_send):
     """
     # Wait for the user to input the OFFER
     offer_str = input("Paste the OFFER from the other peer and press Enter:\n").strip()
-
 
     try:
         offer_json = json.loads(offer_str)
@@ -94,9 +92,19 @@ def on_channel_open(channel, file_to_send):
     if file_to_send and os.path.isfile(file_to_send):
         asyncio.ensure_future(send_file(channel, file_to_send))
     else:
-        # If no file is specified, just allow user to type messages
-        # In a real app, you could prompt the user or read from stdin, etc.
-        pass
+        # Allow user to type messages if no file is specified
+        asyncio.ensure_future(chat_prompt(channel))
+
+async def chat_prompt(channel):
+    """
+    Continuously prompt the user to input chat messages and send them.
+    """
+    while True:
+        message = input("You: ").strip()
+        if message.lower() == "bye":
+            print("Ending chat. Goodbye!")
+            break
+        channel.send(message)
 
 async def send_file(channel, file_path):
     """
@@ -136,9 +144,6 @@ def on_message_received(message):
                 file_name = data["file_name"]
                 file_size = data["file_size"]
                 print(f"Incoming file: {file_name} ({file_size} bytes)")
-                # Prepare file to write
-                # We'll store file data in a global buffer or manage a temporary file
-                # For simplicity, let's store it in memory or open a file
                 open_file_receiver(file_name, file_size)
             else:
                 # It's normal text in JSON
@@ -147,12 +152,11 @@ def on_message_received(message):
             # It's likely plain text that isn't JSON
             print("Peer:", message)
 
-# We’ll keep a simple dictionary to manage incoming file data by name
 incoming_files = {}
 
 def open_file_receiver(file_name, file_size):
     """
-    Prepare to receive a file by opening it in a local file, or you could handle it in memory.
+    Prepare to receive a file by opening it in a local file.
     """
     incoming_files[file_name] = {
         "file_name": file_name,
@@ -165,24 +169,18 @@ def open_file_receiver(file_name, file_size):
 def handle_binary_message(message):
     """
     Called when we receive a binary message (file chunk).
-    We figure out which file is currently being received and append the chunk.
     """
-    # If we only track one file at a time, we can assume we know which file is being received.
-    # But let's do a simpler approach: if there's exactly one file in progress, use that.
     if len(incoming_files) == 1:
-        # Retrieve the only file in the dictionary
         file_info = next(iter(incoming_files.values()))
         file_info["handle"].write(message)
         file_info["received_bytes"] += len(message)
-        
+
         if file_info["received_bytes"] >= file_info["file_size"]:
-            # Done receiving
             file_info["handle"].close()
             print(f"File '{file_info['file_name']}' received successfully!")
-            # Remove from the dictionary
             incoming_files.pop(file_info["file_name"])
     else:
-        print("Warning: Received file chunk but no file metadata or multiple files in progress!")
+        print("Warning: Received file chunk but no metadata or multiple files in progress!")
 
 async def hold_connection():
     """
@@ -199,10 +197,8 @@ def main():
     parser.add_argument("--file", help="Path to a file you want to send (optional)", default=None)
     args = parser.parse_args()
 
-    # Create PeerConnection
     pc = RTCPeerConnection()
 
-    # We’ll run the event loop
     loop = asyncio.get_event_loop()
 
     try:
@@ -213,7 +209,6 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        # Clean up
         loop.run_until_complete(pc.close())
 
 if __name__ == "__main__":
