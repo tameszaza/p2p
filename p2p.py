@@ -2,8 +2,6 @@ import argparse
 import asyncio
 import json
 import os
-import sys
-
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
 # We'll use a single data channel for both chat & file transfer
@@ -87,7 +85,8 @@ def on_channel_open(channel, file_to_send):
     Called when data channel is open. We can either send a text prompt or send a file if specified.
     """
     print("Data channel is open! You can start chatting or send a file.")
-
+    # Test message to verify connection
+    channel.send("Test message from this peer.")
     # If a file is specified, automatically start file transfer
     if file_to_send and os.path.isfile(file_to_send):
         asyncio.ensure_future(send_file(channel, file_to_send))
@@ -148,7 +147,6 @@ def on_message_received(message):
         except:
             print("Peer:", message)
 
-
 incoming_files = {}
 
 def open_file_receiver(file_name, file_size):
@@ -194,7 +192,10 @@ def main():
     parser.add_argument("--file", help="Path to a file you want to send (optional)", default=None)
     args = parser.parse_args()
 
-    pc = RTCPeerConnection()
+    # Add a STUN server for better NAT traversal
+    pc = RTCPeerConnection({
+        "iceServers": [{"urls": "stun:stun.l.google.com:19302"}]
+    })
 
     loop = asyncio.get_event_loop()
 
