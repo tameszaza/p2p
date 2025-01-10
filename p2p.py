@@ -2,7 +2,17 @@ import argparse
 import asyncio
 import json
 import os
+import sys
+import logging
+
 from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCConfiguration, RTCIceServer
+
+ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice_servers))
+
+# Enable debug-level logging for aiortc
+logging.basicConfig(level=logging.DEBUG)
 
 # We'll use a single data channel for both chat & file transfer
 CHANNEL_LABEL = "p2p-data-channel"
@@ -14,6 +24,7 @@ async def run_offer(pc, file_to_send):
     """
     # Create data channel for chat & file transfer
     channel = pc.createDataChannel(CHANNEL_LABEL)
+
     channel.on("open", lambda: on_channel_open(channel, file_to_send))
     channel.on("message", on_message_received)
 
@@ -85,8 +96,10 @@ def on_channel_open(channel, file_to_send):
     Called when data channel is open. We can either send a text prompt or send a file if specified.
     """
     print("Data channel is open! You can start chatting or send a file.")
-    # Test message to verify connection
+
+    # Send a quick test message to verify communication
     channel.send("Test message from this peer.")
+
     # If a file is specified, automatically start file transfer
     if file_to_send and os.path.isfile(file_to_send):
         asyncio.ensure_future(send_file(channel, file_to_send))
@@ -100,8 +113,11 @@ async def chat_prompt(channel):
     """
     while True:
         message = input("You: ").strip()
+        if not message:
+            continue
         if message.lower() == "bye":
             print("Ending chat. Goodbye!")
+            channel.send("Peer has left the chat.")
             break
         channel.send(message)
 
@@ -132,9 +148,12 @@ def on_message_received(message):
     Called when a message is received. We'll handle both text and file chunks.
     """
     print(f"DEBUG: Message received: {message}")
+
+    # If it's bytes, it might be part of a file or metadata
     if isinstance(message, bytes):
         handle_binary_message(message)
     else:
+        # If it's text, see if it's file metadata or normal text
         try:
             data = json.loads(message)
             if data.get("type") == "file_meta":
@@ -144,7 +163,8 @@ def on_message_received(message):
                 open_file_receiver(file_name, file_size)
             else:
                 print("Peer:", data)
-        except:
+        except Exception:
+            # It's likely plain text that isn't JSON
             print("Peer:", message)
 
 incoming_files = {}
@@ -175,7 +195,7 @@ def handle_binary_message(message):
             print(f"File '{file_info['file_name']}' received successfully!")
             incoming_files.pop(file_info["file_name"])
     else:
-        print("Warning: Received file chunk but no metadata or multiple files in progress!")
+        print("Warning: Received file chunk but no file metadata or multiple files in progress!")
 
 async def hold_connection():
     """
@@ -192,12 +212,15 @@ def main():
     parser.add_argument("--file", help="Path to a file you want to send (optional)", default=None)
     args = parser.parse_args()
 
-    # Add a STUN server for better NAT traversal
-    pc = RTCPeerConnection({
-        "iceServers": [{"urls": "stun:stun.l.google.com:19302"}]
-    })
+    from aiortc import RTCConfiguration, RTCIceServer
 
-    loop = asyncio.get_event_loop()
+    # Create a PeerConnection with a public STUN server for NAT traversal
+    ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+    pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice_servers))
+
+    # Fix the DeprecationWarning by using new_event_loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     try:
         if args.role == "offer":
@@ -208,6 +231,7 @@ def main():
         pass
     finally:
         loop.run_until_complete(pc.close())
+
 
 if __name__ == "__main__":
     main()
